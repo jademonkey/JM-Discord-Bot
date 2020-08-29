@@ -1,5 +1,6 @@
 admins
-roleStrToRole
+roles
 token
-guildID
+guild
 channel
+bans

@@ -1,0 +1,17 @@
+--Functions--
+* string -> roles mapping
+* command timeouts (help = global, others are per user) 1 message to say timeout then ignored
+* timeout for banned users so they get ignored after one message
+
+
+--Commands--
+1. !help
+2. !listroles
+3. !addrole
+4. !removerole
+5. !listmyroles
+
+--Admin Commands--
+1. !newrole
+2. !banuser
+3. !unbanuser
