@@ -1,7 +1,11 @@
-// Start
+// (c) 2020 Robert Parker
+// This code is licensed under MIT license (see LICENSE for details)
 package main
 
 import (
+	"bufio"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -12,92 +16,92 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// Data types
+type fileEntry struct {
+	FriendlyName string
+	ID           string
+}
+
+// Constants
+const adminFile = "data/admins"
+const bansFile = "data/bans"
+const channelFile = "data/channel"
+const guildFile = "data/guild"
+const rolesFile = "data/roles"
+const tokenFile = "data/token"
+
+// Global variables
 var token string
 var channel string
 var guild string
+var admins []fileEntry
+var rolesStrings []fileEntry
+var bannedusers []fileEntry
 
-//temp
-var admins string
-var rolesStrings string
-var bannedusers string
-
-func readFiles() {
+// Function to read necessary files and load the global
+// variables with the data in them
+func readDataFiles() error {
 	// token
-	tempBytes, err := ioutil.ReadFile("data/token")
+	var err error
+	token, err = readSingleLineFile(tokenFile)
 	if err != nil {
-		log.Printf("failed to read data/token file.")
-		return
+		log.Printf("failed to read %s file. %v", tokenFile, err)
+		return err
 	}
-	token = string(tempBytes)
 
 	// channel
-	tempBytes, err = ioutil.ReadFile("data/channel")
+	channel, err = readSingleLineFile(channelFile)
 	if err != nil {
-		log.Printf("failed to read data/channel file.")
-		return
+		log.Printf("failed to read %s file. %v", channelFile, err)
+		return err
 	}
-	channel = string(tempBytes)
 
 	// guild
-	tempBytes, err = ioutil.ReadFile("data/guild")
+	guild, err = readSingleLineFile(guildFile)
 	if err != nil {
-		log.Printf("failed to read data/channel file.")
-		return
+		log.Printf("failed to read %s file. %v", guildFile, err)
+		return err
 	}
-	guild = string(tempBytes)
 
 	//admins
-	tempBytes, err = ioutil.ReadFile("data/admins")
+	admins, err = readEntriesFromFile(adminFile)
 	if err != nil {
-		log.Printf("failed to read data/admins file.")
-		return
+		log.Printf("failed to read %s file. %v", adminFile, err)
+		return err
 	}
-	admins = string(tempBytes)
 
 	// roles
-	tempBytes, err = ioutil.ReadFile("data/roles")
+	rolesStrings, err = readEntriesFromFile("data/roles")
 	if err != nil {
-		log.Printf("failed to read data/admins file.")
-		return
+		log.Printf("failed to read data/roles file. %v", err)
+		return err
 	}
-	rolesStrings = string(tempBytes)
 
 	// banned users
-	tempBytes, err = ioutil.ReadFile("data/bans")
+	bannedusers, err = readEntriesFromFile("data/bans")
 	if err != nil {
-		log.Printf("failed to read data/admins file.")
-		return
+		log.Printf("failed to read data/bans file. %v", err)
+		return err
 	}
-	bannedusers = string(tempBytes)
 
 	// temp output
-	log.Printf("token read '%s'", token)
-	log.Printf("channel read '%s'", channel)
-	log.Printf("guild read '%s'", guild)
-	log.Printf("admins read '%s'", admins)
-	log.Printf("roles read '%s'", rolesStrings)
-	log.Printf("bans read '%s'", bannedusers)
+	log.Printf("token read '%v'", token)
+	log.Printf("channel read '%v'", channel)
+	log.Printf("guild read '%v'", guild)
+	log.Printf("admins read '%v'", admins)
+	log.Printf("roles read '%v'", rolesStrings)
+	log.Printf("bans read '%v'", bannedusers)
+	return nil
 }
 
-// Format: <friendly print name> <user ID>
-func parseAdmins() {
-
-}
-
-// Format: <friendly print name> <user ID>
-func parseBans() {
-
-}
-
-// Format: <string variant> <role ID>
-func parseRoles() {
-
-}
-
+// Main execution function
 func main() {
-	log.Printf("Starting up")
+	log.Println("Starting up")
 
-	readFiles()
+	err := readDataFiles()
+	if err != nil {
+		log.Fatalf("Error reading data files: %v", err)
+	}
 
 	// Validation
 	if token == "" {
@@ -110,11 +114,12 @@ func main() {
 		log.Fatalln("Guild ID file was read but could not extract the guild ID!")
 	}
 
+	log.Println("Data Files read")
+
 	// Create a new Discord session using the provided bot token.
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
-		log.Println("Error creating Discord session: ", err)
-		return
+		log.Fatalln("Error creating Discord session: ", err)
 	}
 
 	// Register ready as a callback for the ready events.
@@ -122,12 +127,15 @@ func main() {
 
 	dg.AddHandler(messageCreate)
 
+	log.Println("Connecting Bot")
+
 	// Open a websocket connection to Discord and begin listening.
 	err = dg.Open()
 	if err != nil {
-		log.Println("error opening connection,", err)
-		return
+		log.Fatalln("error opening connection,", err)
 	}
+
+	dg.UpdateStatus(0, "Listening to !help")
 
 	// Wait here until CTRL-C or other term signal is received.
 	log.Println("Bot is now running.  Press CTRL-C to exit.")
@@ -135,6 +143,7 @@ func main() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 
+	log.Println("Closing down")
 	// Cleanly close down the Discord session.
 	dg.Close()
 }
@@ -143,8 +152,8 @@ func main() {
 // the "ready" event from Discord.
 func ready(s *discordgo.Session, event *discordgo.Ready) {
 
-	// Set the playing status.
-	log.Printf("Received Ready Event")
+	log.Println("Discord has alerted us it is ready for us!")
+
 }
 
 // This function will be called (due to AddHandler above) every time a new
@@ -170,4 +179,68 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		log.Println("Detected a command!")
 	}
 
+}
+
+// Reads a single line from a given file or returns an error
+// if it cannot read the file or there is more than 1 line.
+func readSingleLineFile(file string) (string, error) {
+	tempBytes, err := ioutil.ReadFile(file)
+	if err != nil {
+		log.Printf("failed to read %s file. %v", file, err)
+		return "", err
+	}
+	strTempBytes := strings.Trim(string(tempBytes), " ")
+	if strings.Contains(strTempBytes, "\n") {
+		return "", fmt.Errorf("File contained more than 1 line")
+	}
+
+	return strTempBytes, nil
+}
+
+// Reads a file for Entries and returns an array of those entries
+// All entries are in the format '<string> <string>'
+func readEntriesFromFile(file string) ([]fileEntry, error) {
+	var toreturn []fileEntry
+	fileHandle, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer fileHandle.Close()
+
+	lineReader := bufio.NewReader(fileHandle)
+	for {
+		line, err := lineReader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			log.Printf("error - %v", err)
+			return nil, err
+		}
+		line = strings.Trim(line, " \n\r\t")
+		if len(line) == 0 && err == nil {
+			continue
+		}
+		if len(line) == 0 && err != nil {
+			break
+		}
+
+		sepd := strings.Split(line, " ")
+		if len(sepd) != 2 {
+			// Faulty line so ignore
+			continue
+		}
+
+		toAdd := fileEntry{sepd[0], sepd[1]}
+		toreturn = append(toreturn, toAdd)
+
+		if err != nil {
+			break
+		}
+	}
+
+	return toreturn, nil
+}
+
+// Takes an array of entries and writes them to a given file
+func writeEntriesToFile(file string, entries []fileEntry) error {
+	// TODO
+	return nil
 }

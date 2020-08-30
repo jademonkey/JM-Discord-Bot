@@ -1,8 +1,6 @@
 --Functions--
-* string -> roles mapping
 * command timeouts (help = global, others are per user) 1 message to say timeout then ignored
 * timeout for banned users so they get ignored after one message
-
 
 --Commands--
 1. !help
