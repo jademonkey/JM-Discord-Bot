@@ -3,7 +3,6 @@
 * timeout for banned users so they get ignored after one message
 
 --Commands--
-1. !help
 2. !listroles
 3. !addrole
 4. !removerole

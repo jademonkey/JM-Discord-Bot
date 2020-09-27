@@ -8,8 +8,10 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -37,6 +39,24 @@ var guild string
 var admins []fileEntry
 var rolesStrings []fileEntry
 var bannedusers []fileEntry
+
+var usagePrint map[string]string
+var commandFuncs map[string]func(s *discordgo.Session, parms []string)
+
+func populateUsage() {
+	usagePrint = make(map[string]string)
+
+	usagePrint["help"] = "!help (command) - Print available commands or more details about a single command"
+	usagePrint["roll"] = "!roll <dice>    - Rolls a specific dice. Format is xdx, where x is a positive number."
+}
+
+func populateFuncs() {
+	commandFuncs = make(map[string]func(s *discordgo.Session, parms []string))
+
+	commandFuncs["help"] = callHelp
+	commandFuncs["roll"] = callRoll
+
+}
 
 // Function to read necessary files and load the global
 // variables with the data in them
@@ -116,6 +136,9 @@ func main() {
 
 	log.Println("Data Files read")
 
+	populateUsage()
+	populateFuncs()
+
 	// Create a new Discord session using the provided bot token.
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -144,6 +167,7 @@ func main() {
 	<-sc
 
 	log.Println("Closing down")
+	//dg.ChannelMessageSend(channel, "I am shutting down, i will not be able to handle your messages!")
 	// Cleanly close down the Discord session.
 	dg.Close()
 }
@@ -151,9 +175,8 @@ func main() {
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord.
 func ready(s *discordgo.Session, event *discordgo.Ready) {
-
 	log.Println("Discord has alerted us it is ready for us!")
-
+	//s.ChannelMessageSend(channel, "I am Ready for action!")
 }
 
 // This function will be called (due to AddHandler above) every time a new
@@ -177,8 +200,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "!") {
 		// It's a command!
 		log.Println("Detected a command!")
+		allParms := strings.Split(m.Content, " ")
+		command := strings.TrimPrefix(allParms[0], "!")
+		callCommand(s, m, command, allParms[1:len(allParms)])
 	}
-
 }
 
 // Reads a single line from a given file or returns an error
@@ -243,4 +268,96 @@ func readEntriesFromFile(file string) ([]fileEntry, error) {
 func writeEntriesToFile(file string, entries []fileEntry) error {
 	// TODO
 	return nil
+}
+
+func callCommand(s *discordgo.Session, m *discordgo.MessageCreate, command string, parms []string) {
+	log.Printf("Command called '%s' with parameters '%s'\n", command, parms)
+
+	if val, ok := commandFuncs[command]; ok {
+		val(s, parms)
+	} else {
+		printUsage(s, "")
+	}
+}
+
+func callHelp(s *discordgo.Session, parms []string) {
+	if len(parms) == 0 {
+		log.Println("help: no parms provided")
+		printUsage(s, "")
+	} else if len(parms) == 1 {
+		log.Printf("help: 1 parm provided %s\n", parms)
+		printUsage(s, parms[0])
+	} else {
+		log.Println("help: bad call")
+		printUsage(s, "help")
+	}
+}
+
+func callRoll(s *discordgo.Session, parms []string) {
+	if len(parms) != 1 {
+		log.Printf("Incorrect number of parameters %d\n", len(parms))
+		printUsage(s, "roll")
+		return
+	}
+
+	figments := strings.Split(parms[0], "d")
+	if len(figments) != 2 {
+		log.Printf("Incorrect number of small parts %d\n", len(figments))
+		printUsage(s, "roll")
+		return
+	}
+
+	i1, err := strconv.Atoi(figments[0])
+	if err != nil {
+		log.Printf("First component is not a number - %v\n", err)
+		printUsage(s, "roll")
+		return
+	}
+	i2, err := strconv.Atoi(figments[1])
+	if err != nil {
+		log.Printf("Second component is not a number - %v\n", err)
+		printUsage(s, "roll")
+		return
+	}
+
+	if i1 < 0 || i2 < 0 {
+		log.Println("One of the number is 0")
+		printUsage(s, "roll")
+		return
+	}
+
+	toPrint := "rolling " + parms[0] + "\n"
+
+	if i1 == 0 || i2 == 0 {
+		toPrint += "0 - dumbass"
+	} else {
+		max := i1 * i2
+		myNum := rand.Intn(max) // In range 0 -> max-1
+		myNum++                 //So we are in range 1 -> max
+		toPrint += strconv.Itoa(myNum) + "\n"
+	}
+
+	s.ChannelMessageSend(channel, toPrint)
+}
+
+func printUsage(s *discordgo.Session, command string) {
+	var toPrint string
+	log.Printf("searching for usage for %s\n", command)
+
+	if command != "" {
+		toPrint = usagePrint[command]
+		if toPrint == "" {
+			log.Println("Printing all usages")
+			toPrint += "Unknown command: " + command + "\n"
+			for _, value := range usagePrint {
+				toPrint += value + "\n"
+			}
+		}
+	} else {
+		log.Println("Printing all usages")
+		for _, value := range usagePrint {
+			toPrint += value + "\n"
+		}
+	}
+	s.ChannelMessageSend(channel, toPrint)
 }
