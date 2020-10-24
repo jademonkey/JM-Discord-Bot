@@ -41,21 +41,28 @@ var rolesStrings []fileEntry
 var bannedusers []fileEntry
 
 var usagePrint map[string]string
-var commandFuncs map[string]func(s *discordgo.Session, parms []string)
+var commandFuncs map[string]func(s *discordgo.Session, m *discordgo.MessageCreate, parms []string)
 
 func populateUsage() {
 	usagePrint = make(map[string]string)
 
 	usagePrint["help"] = "!help (command) - Print available commands or more details about a single command"
 	usagePrint["roll"] = "!roll <dice>    - Rolls a specific dice. Format is xdx, where x is a positive number."
+	usagePrint["listmyroles"] = "!listmyroles - Prints your current assigned roles."
+	usagePrint["addrole"] = "!addrole <role> - Adds the requested role to you."
+	usagePrint["removerole"] = "!removerole <role> - Reoves the role from you."
+	usagePrint["listroles"] = "!listroles - Lists roles you can assign to yourself."
 }
 
 func populateFuncs() {
-	commandFuncs = make(map[string]func(s *discordgo.Session, parms []string))
+	commandFuncs = make(map[string]func(s *discordgo.Session, m *discordgo.MessageCreate, parms []string))
 
 	commandFuncs["help"] = callHelp
 	commandFuncs["roll"] = callRoll
-
+	commandFuncs["listmyroles"] = callListMyRoles
+	commandFuncs["addrole"] = callAddRole
+	commandFuncs["removerole"] = callRemoveRole
+	commandFuncs["listroles"] = callListRoles
 }
 
 // Function to read necessary files and load the global
@@ -102,6 +109,7 @@ func readDataFiles() error {
 	if err != nil {
 		log.Printf("failed to read data/bans file. %v", err)
 		return err
+
 	}
 
 	// temp output
@@ -274,59 +282,119 @@ func callCommand(s *discordgo.Session, m *discordgo.MessageCreate, command strin
 	log.Printf("Command called '%s' with parameters '%s'\n", command, parms)
 
 	if val, ok := commandFuncs[command]; ok {
-		val(s, parms)
+		val(s, m, parms)
 	} else {
-		printUsage(s, "")
+		printUsage(s, m, "")
 	}
 }
 
-func callHelp(s *discordgo.Session, parms []string) {
+func callListMyRoles(s *discordgo.Session, m *discordgo.MessageCreate, parms []string) {
+	//parms ignored
+	userID := m.Author.ID
+	var toPrint string
+
+	toPrint = m.Author.Mention() + " Your roles are: "
+
+	// Get the user object!
+	memberObj, err := s.GuildMember(guild, userID)
+	if err != nil {
+		log.Printf("Failed to get the member from the guild: %v\n", err)
+	}
+
+	//Get the roles list
+	allRolesID := memberObj.Roles
+
+	i := 0
+	for _, roleI := range allRolesID {
+		for _, roleF := range rolesStrings {
+			if roleF.ID == roleI {
+				if i == 0 {
+					i++
+				} else {
+					toPrint += ", "
+				}
+				toPrint += "`" + roleF.FriendlyName + "`"
+				break
+			}
+		}
+	}
+
+	s.ChannelMessageSend(channel, toPrint)
+}
+
+func callAddRole(s *discordgo.Session, m *discordgo.MessageCreate, parms []string) {
+}
+
+func callRemoveRole(s *discordgo.Session, m *discordgo.MessageCreate, parms []string) {
+
+}
+
+func callListRoles(s *discordgo.Session, m *discordgo.MessageCreate, parms []string) {
+	//parms ignored
+	var toPrint string
+	log.Println("Listing the available roles")
+
+	toPrint = m.Author.Mention() + " The following roles are available: "
+	i := 0
+	for _, role := range rolesStrings {
+		if i != 0 {
+			toPrint += ", "
+		} else {
+			i++
+		}
+		toPrint += "`" + role.FriendlyName + "`"
+	}
+
+	s.ChannelMessageSend(channel, toPrint)
+}
+
+func callHelp(s *discordgo.Session, m *discordgo.MessageCreate, parms []string) {
 	if len(parms) == 0 {
 		log.Println("help: no parms provided")
-		printUsage(s, "")
+		printUsage(s, m, "")
 	} else if len(parms) == 1 {
 		log.Printf("help: 1 parm provided %s\n", parms)
-		printUsage(s, parms[0])
+		printUsage(s, m, parms[0])
 	} else {
 		log.Println("help: bad call")
-		printUsage(s, "help")
+		printUsage(s, m, "help")
 	}
 }
 
-func callRoll(s *discordgo.Session, parms []string) {
+func callRoll(s *discordgo.Session, m *discordgo.MessageCreate, parms []string) {
 	if len(parms) != 1 {
 		log.Printf("Incorrect number of parameters %d\n", len(parms))
-		printUsage(s, "roll")
+		printUsage(s, m, "roll")
 		return
 	}
 
 	figments := strings.Split(parms[0], "d")
 	if len(figments) != 2 {
 		log.Printf("Incorrect number of small parts %d\n", len(figments))
-		printUsage(s, "roll")
+		printUsage(s, m, "roll")
 		return
 	}
 
 	i1, err := strconv.Atoi(figments[0])
 	if err != nil {
 		log.Printf("First component is not a number - %v\n", err)
-		printUsage(s, "roll")
+		printUsage(s, m, "roll")
 		return
 	}
 	i2, err := strconv.Atoi(figments[1])
 	if err != nil {
 		log.Printf("Second component is not a number - %v\n", err)
-		printUsage(s, "roll")
+		printUsage(s, m, "roll")
 		return
 	}
 
 	if i1 < 0 || i2 < 0 {
 		log.Println("One of the number is 0")
-		printUsage(s, "roll")
+		printUsage(s, m, "roll")
 		return
 	}
 
-	toPrint := "rolling " + parms[0] + "\n"
+	toPrint := m.Author.Mention() + " You rolled " + parms[0] + "\nResult: "
 
 	if i1 == 0 || i2 == 0 {
 		toPrint += "0 - dumbass"
@@ -340,12 +408,12 @@ func callRoll(s *discordgo.Session, parms []string) {
 	s.ChannelMessageSend(channel, toPrint)
 }
 
-func printUsage(s *discordgo.Session, command string) {
+func printUsage(s *discordgo.Session, m *discordgo.MessageCreate, command string) {
 	var toPrint string
 	log.Printf("searching for usage for %s\n", command)
-
+	toPrint = m.Author.Mention() + " "
 	if command != "" {
-		toPrint = usagePrint[command]
+		toPrint += usagePrint[command]
 		if toPrint == "" {
 			log.Println("Printing all usages")
 			toPrint += "Unknown command: " + command + "\n"
